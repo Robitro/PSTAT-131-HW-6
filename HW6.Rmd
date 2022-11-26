@@ -1,0 +1,188 @@
+---
+title: "HW6"
+output: html_document
+date: "2022-11-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidymodels)
+library(tidyverse)
+library(corrplot)
+library(janitor)
+library(ggplot2)
+library(rpart.plot)
+library(randomForest)
+library(ranger)
+library(vip)
+library(xgboost)
+```
+
+## 1
+```{r}
+poke_data <- read.csv("Pokemon.csv")
+
+poke_data<-clean_names(poke_data)
+
+poke_data<-subset(poke_data,type_1 %in% c("Bug","Fire","Grass","Normal","Water","Psychic"))  
+
+poke_data$type_1 <- as.factor(poke_data$type_1)  
+
+poke_data$legendary <-as.factor(poke_data$legendary)
+
+set.seed(6688)
+poke_data_split <- initial_split(poke_data, prop=.7, strata = type_1) 
+
+poke_train <- training(poke_data_split)
+poke_test <- testing(poke_data_split)
+
+#318 training observations
+count(poke_train)
+# 140 testing observations
+count(poke_test)
+
+poke_folds <- vfold_cv(poke_train, v = 5, stata = type_1)
+
+poke_re <- recipe(type_1 ~ legendary + generation+sp_atk+attack+speed+defense+hp+sp_def, data = poke_train) %>% step_dummy(c(legendary,generation)) %>% step_normalize(all_numeric_predictors())
+
+
+```
+
+## 2 
+```{r}
+
+poke_data_cor <- select(poke_data, -c(x,generation))
+
+cor <- cor(select_if(poke_data_cor,is.numeric))
+
+corrplot(cor,diag = FALSE,type = 'lower')
+
+```
+To make my correlation matrix, I subset my data set to have only continuous data. every correlation is positive in the plot, with total having the strongest correlations with nearly everything. sp_atk and attack being positively correlated makes sense as wel as sp_def and defense being positively correlated.
+
+
+## 3
+```{r}
+dt <- decision_tree() %>% set_engine("rpart") %>% set_mode("classification")
+
+dt_wf <- workflow() %>% add_model(dt %>% set_args(cost_complexity = tune())) %>% add_formula(type_1 ~ legendary + generation+sp_atk+attack+speed+defense+hp+sp_def)
+
+cc_grid <- grid_regular(cost_complexity(range= c(-3,-1)),levels = 10)
+
+
+
+
+```
+
+```{r,eval=FALSE}
+tune_res <- tune_grid(dt_wf, resamples = poke_folds, grid = cc_grid, metrics = metric_set(roc_auc) ) 
+
+save(tune_res, file = "tune_res.rda")
+
+```
+
+```{r}
+load("tune_res.rda")
+
+autoplot(tune_res)
+
+```
+The single decision tree seems to preform best with little to no cost complexity, meaning the tree is free to go with little or no pruning.
+
+## 4
+```{r}
+collect_metrics(tune_res) %>% arrange()
+
+
+```
+
+The best pruned tree was a 3 way tie with an roc of .6476, this was for cost complexity of .0010, .0017, and .0028.
+
+## 5A
+```{r}
+best_cp <- select_best(tune_res)
+
+dt_wf_f <- finalize_workflow(dt_wf,best_cp)
+
+dt_wf_f_fit <- fit(dt_wf_f, data = poke_train)
+
+dt_wf_f_fit %>% extract_fit_engine() %>% rpart.plot()
+```
+
+
+## 5B
+```{r}
+rf <- rand_forest() %>% set_engine("ranger", importance = "impurity") %>% set_mode("classification")
+
+rf_wf <- workflow() %>% add_model(rf %>% set_args(mtry = tune(), trees = tune(),min_n = tune())) %>% add_formula(type_1 ~ legendary + generation+sp_atk+attack+speed+defense+hp+sp_def)
+
+rand_grid <- grid_regular(mtry(range= c(1,8)), trees(range = c(1,1000)), min_n(range = c(2,10)),levels = 8)
+
+
+
+
+```
+
+## 6
+```{r, eval=FALSE}
+tune_rand <- tune_grid(rf_wf, resamples = poke_folds, grid = rand_grid, metrics = metric_set(roc_auc) )
+
+save(tune_rand,file = "tune_rand.rda")
+
+
+```
+
+```{r}
+load(file = "tune_rand.rda")
+
+autoplot(tune_rand)
+
+```
+1 tree preformed much worse than other models with multiple trees, It looks as if a node size of 3 with 2-3 ramdoml selected predictors achieves the best results but many other combinations produce similar results.
+
+
+```{r}
+collect_metrics(tune_rand) %>% arrange(desc(mean))
+
+```
+The best preforming forest had 714 trees 2 randomly selected predictors and a minimum of 2 to split, it produced an AOC of .7545.
+
+## 7
+```{r}
+best_forest <- select_best(tune_rand)
+
+rf_wf_f <- finalize_workflow(rf_wf,best_forest)
+
+rf_wf_f_fit <- fit(rf_wf_f, data = poke_train) %>% extract_fit_parsnip()
+
+vip(rf_wf_f_fit)
+
+```
+Special Attack was the most important with 40%, most other variables fall around 30% with the lowest being generation with around 20% and legendary being about 2 percent. I am a little surprised that special attack was the most important variable but it is possible that a few classes can be easily distinguished by their special attack. I am a little surprised that legendary has so little importance.
+
+## 9
+```{r}
+bt <- boost_tree() %>% set_engine("xgboost") %>% set_mode("classification")
+
+bt_wf <- workflow() %>% add_model(bt %>% set_args(trees = tune())) %>% add_formula(type_1 ~ legendary + generation+sp_atk+attack+speed+defense+hp+sp_def)
+
+tree_grid <- grid_regular(trees(range= c(10,2000)),levels = 10)
+
+```
+```{r, eval=FALSE}
+tune_tree <- tune_grid(bt_wf, resamples = poke_folds, grid = tree_grid, metrics = metric_set(roc_auc) )
+
+save(tune_tree, file = "tune_tree.rda")
+
+
+```
+
+```{r}
+load("tune_tree.rda")
+autoplot(tune_tree)
+
+collect_metrics(tune_tree) %>% arrange(desc(mean))
+
+```
+452 trees preforms best with boosted trees with an AOC of .7121.
+
