@@ -91,9 +91,10 @@ The single decision tree seems to preform best with little to no cost complexity
 
 ## 4
 ```{r}
-collect_metrics(tune_res) %>% arrange()
+metrics_dt <-collect_metrics(tune_res) %>% arrange()
+metrics_dt
 
-
+roc_dt <- metrics_dt[1,4]
 ```
 
 The best pruned tree was a 3 way tie with an roc of .6476, this was for cost complexity of .0010, .0017, and .0028.
@@ -142,8 +143,10 @@ autoplot(tune_rand)
 
 
 ```{r}
-collect_metrics(tune_rand) %>% arrange(desc(mean))
+metrics_rand <- collect_metrics(tune_rand) %>% arrange(desc(mean))
+metrics_rand
 
+roc_rand <- metrics_rand[1,6]
 ```
 The best preforming forest had 714 trees 2 randomly selected predictors and a minimum of 2 to split, it produced an AOC of .7545.
 
@@ -181,8 +184,26 @@ save(tune_tree, file = "tune_tree.rda")
 load("tune_tree.rda")
 autoplot(tune_tree)
 
-collect_metrics(tune_tree) %>% arrange(desc(mean))
+metrics_boost <- collect_metrics(tune_tree) %>% arrange(desc(mean))
+metrics_boost
+roc_boost <- metrics_boost[1,4]
 
 ```
 452 trees preforms best with boosted trees with an AOC of .7121.
 
+## 10
+```{r}
+roc <- data.frame(roc_dt,roc_rand,roc_boost)
+
+test_fit <- fit(rf_wf_f,poke_test)
+
+pred_res <- augment(test_fit, poke_test)
+
+roc_curve(pred_res, type_1, .pred_Bug:.pred_Water) %>% autoplot()
+
+conf_mat(pred_res,truth = type_1, estimate = .pred_class) %>% autoplot(type = "heatmap")
+
+
+
+```
+Our random forest model performs best on our training set. We have already finalized our workflow for random forest so the code is above. The random forest model did extremely well at predicting our testing data, it was correct for all predicitons except one fire type that was categorized as a grass.
