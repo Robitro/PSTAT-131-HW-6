@@ -203,6 +203,8 @@ pred_res <- augment(test_fit, poke_test)
 
 roc_curve(pred_res, type_1, .pred_Bug:.pred_Water) %>% autoplot()
 
+roc_auc(pred_res,type_1,.pred_Bug:.pred_Water)
+
 conf_mat(pred_res,truth = type_1, estimate = .pred_class) %>% autoplot(type = "heatmap")
 
 
