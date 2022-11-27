@@ -164,7 +164,7 @@ rf_wf_f_fit <- fit(rf_wf_f, data = poke_train) %>% extract_fit_parsnip()
 
 
 ```
-
+## 7
 ```{r}
 vip(rf_wf_f_fit)
 
