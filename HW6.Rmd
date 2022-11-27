@@ -123,6 +123,8 @@ rand_grid <- grid_regular(mtry(range= c(1,8)), trees(range = c(1,1000)), min_n(r
 
 
 ```
+if mtry equals 8 we will be essential just doing bagging since there is no subset of predictors.
+
 
 ## 6
 ```{r, eval=FALSE}
