@@ -155,11 +155,17 @@ The best preforming forest had 714 trees 2 randomly selected predictors and a mi
 ## 7
 ```{r}
 best_forest <- select_best(tune_rand)
+roc_rand
 
 rf_wf_f <- finalize_workflow(rf_wf,best_forest)
 
 rf_wf_f_fit <- fit(rf_wf_f, data = poke_train) %>% extract_fit_parsnip()
 
+
+
+```
+
+```{r}
 vip(rf_wf_f_fit)
 
 ```
